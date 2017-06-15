@@ -89,7 +89,7 @@ public class PDFPack {
         	  
         	  for(PDFPackImage i : iMap.values()) {
 
-        		  Paths.get(tmpPath.toString(), i.getId() ).toFile().delete();
+        		Paths.get(tmpPath.toString(), i.getId()).toFile().delete();
                 
                 if (i.isScaled()) {
               	  
