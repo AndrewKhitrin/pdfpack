@@ -1,5 +1,6 @@
 package com.rstyle.rsdoc.pdfpack;
 
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -68,6 +69,47 @@ public class PDFPack {
 	
 	private static final Logger log = Logger.getLogger("pdfpack");
 	
+	public static void replaceFile(long id,PackOptions po,File newDoc) throws SQLException, IOException {
+		
+		  log.info("Connecting to database...");
+
+		  Connection conn = null;
+		  
+		  try {
+			  Properties connectionProps = new Properties();
+			  connectionProps.put("user", po.getDbUser());
+			  connectionProps.put("password", po.getDbPass());
+			  
+			  conn = DriverManager.getConnection(po.getDBURL(),connectionProps);
+			  
+			  log.info("Connected.");
+			  
+			  
+			  PreparedStatement pstmt =  conn.prepareStatement("update r2_files set file_data = ? where id = ?");
+			  FileInputStream in = new FileInputStream(newDoc);
+
+    		  pstmt.setBinaryStream(1, in, (int)newDoc.length()); 
+
+			  pstmt.setLong(2, id);  
+			  pstmt.executeUpdate();
+			  conn.commit();
+			  pstmt.close();
+			  
+			  
+			  log.info(String.format("Saved document %d",id));
+
+			} finally {
+				try {
+					if (conn != null)
+					   conn.close();	
+				} catch (Exception e) {
+					log.error(e.getMessage());
+				}
+				
+			}			  
+
+	}
+
 	public static File retriveFile(long id,PackOptions po) throws SQLException, IOException {
 		
 		  log.info("Connecting to database...");
@@ -153,10 +195,7 @@ public class PDFPack {
 		 
 		 log.info(String.format("Proceeding %d lines.", docs.size()));
 		 
-		 //boolean packResult = pack(new FileInputStream("./data/test.pdf"),new FileOutputStream("./data/test_scaled1.pdf"),tmp,po);
-		 
 		 for(String fileId : docs) {
-			 
 			 
 			 try {
 				 
@@ -188,7 +227,15 @@ public class PDFPack {
 					 
 				 }
 				 
+				 log.info(String.format("Saving new document %s ", fileId));
+				 
+				 replaceFile(Long.valueOf(fileId), po, outFile);
+				 
 				 log.info(String.format("Finished document %s (%s)", fileId, outFile.getAbsolutePath()));
+				 
+				 f.delete();
+				 outFile.delete();
+				 
 				
 			} catch (Exception e) {
 				log.error(String.format("Error processing file %s", fileId),e);
@@ -226,86 +273,96 @@ public class PDFPack {
           
           PDDocument document = PDDocument.load(inPDF);
           
-          RSPDFMetaSchema meta = readMetadata(document);
+          int scaledImages = 0;
           
-          if (meta != null) {
-              if (meta.getScaleProc()) {
-            	  log.info(String.format("File already packed to DPI %d at %s ratio -  %.2f processed stream %d",
-            			  meta.getDPI(),
-            			  meta.getProcDate().toString(),
-            			  (float) meta.getOldSize() / (float) meta.getNewSize(),
-            			  meta.getStreams().size()
-            			  ));
-            	  return false;
-              }        	  
-          }
-          
-          log.info("Extractiong images");
-		
-          Map<Integer,Map<String,PDFPackImage>> imgs =  extractImg(document,tmpPath);
-          
-          int pCount = 0;
-          int iCount = 0;
-          long imageSize = 0;
-          
-         for(Map<String,PDFPackImage> iMap: imgs.values()) {
-        	 
-        	  pCount++;  
-        	 
-        	  for(PDFPackImage i : iMap.values()) {
-        		  
-        		  iCount++;
-        		  
-        		  imageSize += i.getOldSize();
-        		  
-        	  }
-         }
-          
-         log.info(String.format("%d pages proceed %d images found", pCount,iCount));
-          
-          ExecutorService taskExecutor = Executors.newFixedThreadPool(MAX_THREADS);
-          
-          log.info("Rescale images.");
-          
-          for(Map<String,PDFPackImage> iMap: imgs.values()) {
-        	  
-        	  for(PDFPackImage i : iMap.values()) {
-        		  
-            	  taskExecutor.submit(new Runnable() {
-      				
-      				@Override
-      				public void run() {
-      					try {      						
-      						scale(i,po,tmpPath);
-      						log.info(i.info());
-      					} catch (Exception e) {
-      						
-      						i.setError(e.getMessage());
-      						i.setScaled(false);
-      						log.error(String.format("Error processing image %s on page %d",i.getName(),i.getPage()), e);
-      					}
-      					
-      				}
-      			});
-            	  
-        	  }
+          try {
+			
+	          RSPDFMetaSchema meta = readMetadata(document);
+	          
+	          if (meta != null) {
+	              if (meta.getScaleProc()) {
+	            	  log.info(String.format("File already packed to DPI %d at `%s` ratio -  %.2f processed stream %d",
+	            			  meta.getDPI(),
+	            			  meta.getProcDate().getTime().toString(),
+	            			  (float) meta.getOldSize() / (float) meta.getNewSize(),
+	            			  meta.getStreams().size()
+	            			  ));
+	            	  return false;
+	              }        	  
+	          }
+	          
+	          log.info("Extractiong images");
+			
+	          Map<Integer,Map<String,PDFPackImage>> imgs =  extractImg(document,tmpPath);
+	          
+	          int pCount = 0;
+	          int iCount = 0;
+	          long imageSize = 0;
+	          
+	         for(Map<String,PDFPackImage> iMap: imgs.values()) {
+	        	 
+	        	  pCount++;  
+	        	 
+	        	  for(PDFPackImage i : iMap.values()) {
+	        		  
+	        		  iCount++;
+	        		  
+	        		  imageSize += i.getOldSize();
+	        		  
+	        	  }
+	         }
+	          
+	         log.info(String.format("%d pages proceed %d images found", pCount,iCount));
+	          
+	          ExecutorService taskExecutor = Executors.newFixedThreadPool(MAX_THREADS);
+	          
+	          log.info("Rescale images.");
+	          
+	          for(Map<String,PDFPackImage> iMap: imgs.values()) {
+	        	  
+	        	  for(PDFPackImage i : iMap.values()) {
+	        		  
+	            	  taskExecutor.submit(new Runnable() {
+	      				
+	      				@Override
+	      				public void run() {
+	      					try {      						
+	      						scale(i,po,tmpPath);
+	      						log.info(i.info());
+	      					} catch (Exception e) {
+	      						
+	      						i.setError(e.getMessage());
+	      						i.setScaled(false);
+	      						log.error(String.format("Error processing image %s on page %d",i.getName(),i.getPage()), e);
+	      					}
+	      					
+	      				}
+	      			});
+	            	  
+	        	  }
+	
+	          }
+	          
+	          taskExecutor.shutdown();
+	          taskExecutor.awaitTermination(MAX_TIMEOUT, TimeUnit.SECONDS);
+	          log.info("Assembling PDF file.");
+	          create(document,imgs,tmpPath);
+	          
+	          scaledImages = addMetadata(document, imgs, po, startTime);
+	          log.info(String.format("%d total images rescaled",scaledImages));
+	          if (scaledImages > 0) {
+	           document.save(outPDF);
+	           outPDF.flush();
+	          }
+	          
+	          log.info("Removing temporary file(s).");
+	          System.gc();
+	          clearTemp(tmpPath, imgs); 
 
-          }
-          
-          taskExecutor.shutdown();
-          taskExecutor.awaitTermination(MAX_TIMEOUT, TimeUnit.SECONDS);
-          log.info("Assembling PDF file.");
-          create(document,imgs,tmpPath);
-          
-          int scaledImages = addMetadata(document, imgs, po, startTime);
-          log.info(String.format("%d total images rescaled",scaledImages));
-          if (scaledImages > 0) {
-           document.save(outPDF);
-           outPDF.flush();
-          }
-          
-          log.info("Removing temporary file(s).");
-          //clearTemp(tmpPath, imgs); FIXME
+          } finally {
+			document.close();
+		  }
+    
           
           return scaledImages > 0;
 	}
@@ -550,16 +607,19 @@ public class PDFPack {
 		
 		java.awt.Image newImg = img.getScaledInstance(scaleX, scaleY, po.getScaleAlgo().getInt());
 		
+		/*img.getType() == BufferedImage.TYPE_CUSTOM ?  BufferedImage.TYPE_INT_RGB : img.getType()*/
         BufferedImage bimage = new BufferedImage(newImg.getWidth(null), newImg.getHeight(null),img.getType() == BufferedImage.TYPE_CUSTOM ?  BufferedImage.TYPE_INT_RGB : img.getType());
         
         Graphics2D bGr = bimage.createGraphics();
-        bGr.drawImage(newImg, 0, 0, null);
-        bGr.dispose();
+        bGr.drawImage(newImg, 0, 0,  Color.WHITE, null);
+        
 		
 		File outFile = Paths.get(tmp.toString(), image.getId() + SCALED_POSTFIX).toFile();
 		
 		ImageIO.write(bimage, "jpeg", outFile);
-		//ImageIO.write(bimage, "png", outFile);
+		//ImageIO.write(bimage, image.getFmt(), outFile);
+		
+		bGr.dispose();
 		
 		image.setNewSize(outFile.length());
 		
