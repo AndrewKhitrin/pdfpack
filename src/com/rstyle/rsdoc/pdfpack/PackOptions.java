@@ -54,5 +54,11 @@ public class PackOptions {
 		this.minPicSize = minPicSize;
 	}
 
+	@Override
+	public String toString() {
+		return "PackOptions [\n ignoreScale=" + ignoreScale + "\n scaleDPI=" + scaleDPI + "\n scaleAlgo=" + scaleAlgo
+				+ "\n minFileSize=" + minFileSize + "\n minPicSize=" + minPicSize + "\n]";
+	}
+
 	
 }

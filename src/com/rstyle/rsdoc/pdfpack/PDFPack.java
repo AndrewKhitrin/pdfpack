@@ -31,6 +31,8 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
 
+import org.apache.jempbox.xmp.XMPMetadata;
+import org.apache.log4j.Logger;
 import org.apache.pdfbox.exceptions.COSVisitorException;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
@@ -56,6 +58,8 @@ public class PDFPack {
 	
 	private static final int VERSION = 1;
 	
+	private static final Logger log = Logger.getLogger("pdfpack");
+	
 	private static PackOptions getDefaultPackOptions(){
 		
 		PackOptions po = new PackOptions();
@@ -72,15 +76,26 @@ public class PDFPack {
 		
 		return po;
 	}
-
+	
 	public static void main(String[] args) throws FileNotFoundException, IOException, InterruptedException, COSVisitorException, ParserConfigurationException, SAXException, TransformerException {
+		
+		log.info("PDF pack Started.");
 		
 		final Path tmp = Paths.get("./data/","/imgs/");
 		
 		 PackOptions po = getDefaultPackOptions();
+		 
+		 log.info(po.toString());
+		 
+		 log.info("Temp path " + tmp.toString());
 		
-		 pack(new FileInputStream("./data/test.pdf"),new FileOutputStream("./data/test_scaled1.pdf"),tmp,po);
+		 boolean packResult = pack(new FileInputStream("./data/test.pdf"),new FileOutputStream("./data/test_scaled1.pdf"),tmp,po);
+		 
+		 if (!packResult) {
+			 log.info("SKIPPED");
+		 }
 		
+		 log.info("PDF pack Finished.");
 	}
 
 	public static void clearTemp(final Path tmpPath,Map<Integer,Map<String,PDFPackImage>> imgs) {
@@ -114,14 +129,42 @@ public class PDFPack {
           
           if (meta != null) {
               if (meta.getScaleProc()) {
-            	  System.out.println(meta.getStreams());
+            	  log.info(String.format("File already packed to DPI %d at %s ratio -  %.2f processed stream %d",
+            			  meta.getDPI(),
+            			  meta.getProcDate().toString(),
+            			  (float) meta.getOldSize() / (float) meta.getNewSize(),
+            			  meta.getStreams().size()
+            			  ));
             	  return false;
               }        	  
           }
+          
+          log.info("Extractiong images");
 		
           Map<Integer,Map<String,PDFPackImage>> imgs =  extractImg(document,tmpPath);
           
+          int pCount = 0;
+          int iCount = 0;
+          long imageSize = 0;
+          
+         for(Map<String,PDFPackImage> iMap: imgs.values()) {
+        	 
+        	  pCount++;  
+        	 
+        	  for(PDFPackImage i : iMap.values()) {
+        		  
+        		  iCount++;
+        		  
+        		  imageSize += i.getOldSize();
+        		  
+        	  }
+         }
+          
+         log.info(String.format("%d pages proceed %d images found", pCount,iCount));
+          
           ExecutorService taskExecutor = Executors.newFixedThreadPool(MAX_THREADS);
+          
+          log.info("Rescale images.");
           
           for(Map<String,PDFPackImage> iMap: imgs.values()) {
         	  
@@ -131,13 +174,14 @@ public class PDFPack {
       				
       				@Override
       				public void run() {
-      					try {
+      					try {      						
       						scale(i,po,tmpPath);
+      						log.info(i.info());
       					} catch (Exception e) {
       						
       						i.setError(e.getMessage());
       						i.setScaled(false);
-      						
+      						log.error(String.format("Error processing image %s on page %d",i.getName(),i.getPage()), e);
       					}
       					
       				}
@@ -149,16 +193,17 @@ public class PDFPack {
           
           taskExecutor.shutdown();
           taskExecutor.awaitTermination(MAX_TIMEOUT, TimeUnit.SECONDS);
-
+          log.info("Assembling PDF file.");
           create(document,imgs,tmpPath);
           
           int scaledImages = addMetadata(document, imgs, po, startTime);
-          
+          log.info(String.format("%d total images rescaled",scaledImages));
           if (scaledImages > 0) {
            document.save(outPDF);
            outPDF.flush();
           }
           
+          log.info("Removing temporary file(s).");
           clearTemp(tmpPath, imgs);
           
           return scaledImages > 0;
@@ -194,11 +239,18 @@ public class PDFPack {
 	     			    try {
 	     				
 	     			    	location.getImage().getCOSStream().replaceWithStream(newImage.getCOSStream());
+	     			    	log.error(String.format("Replace image %s on page %d size - %s new size - %s",
+	     			    			img.getName(),
+	     			    			img.getPage(),
+	     			    			PDFPackImage.hrSize(img.getOldSize()),
+	     			    			PDFPackImage.hrSize(img.getNewSize())
+	     			    			));
 	     				
 						} catch (Exception e) {
 							
 							img.setScaled(false);
 							img.setError(e.getMessage());
+							log.error(String.format("Error replacing image %s on page %d",img.getName(),img.getPage()), e);
 						}
 	     			
 		   		    }
@@ -207,23 +259,36 @@ public class PDFPack {
 
 	}
 
-	public static RSPDFMetaSchema readMetadata(PDDocument document) throws IOException, ParserConfigurationException, SAXException{
+	public static RSPDFMetaSchema readMetadata(PDDocument document) {
 		
-		PDDocumentCatalog catalog = document.getDocumentCatalog();
-		PDMetadata  metadata = catalog.getMetadata();
-		InputStream xmpIn = metadata.createInputStream();
-		DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
-		DocumentBuilder builder = f.newDocumentBuilder();
-        Document xmpDoc = builder.parse(xmpIn);
-        RSPDFMetaMetadata metadataRS = new RSPDFMetaMetadata(xmpDoc); 
-		return metadataRS.getRSPDFSchema();
+		try {
+			PDDocumentCatalog catalog = document.getDocumentCatalog();
+			PDMetadata  metadata = catalog.getMetadata();
+			InputStream xmpIn = metadata.createInputStream();
+			DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = f.newDocumentBuilder();
+	        Document xmpDoc = builder.parse(xmpIn);
+	        RSPDFMetaMetadata metadataRS = new RSPDFMetaMetadata(xmpDoc);
+			return metadataRS.getRSPDFSchema();			
+		} catch (Exception e) {
+			log.info("Unable to read metadata");
+			return null;
+		}
 		
 	}
+	
+
+	
 	public static int addMetadata(PDDocument document,Map<Integer,Map<String,PDFPackImage>> imgs,final PackOptions po,long startTime) throws IOException, ParserConfigurationException, SAXException, TransformerException {
 		
 		PDDocumentCatalog catalog = document.getDocumentCatalog();
 		
 		PDMetadata metadataStream = catalog.getMetadata();
+		if (metadataStream == null) {
+			metadataStream = new PDMetadata(document);			
+			metadataStream.importXMPMetadata(new XMPMetadata());
+			catalog.setMetadata(metadataStream);
+		}
 		InputStream xmpIn = metadataStream.createInputStream();
 
         
@@ -290,21 +355,23 @@ public class PDFPack {
 	private static void scale(PDFPackImage image,PackOptions po,Path tmp) throws IOException {
 	
 		if (!image.isSaved()) {
-			
 			image.setScaled(false);
 			return;
-			
 		}
 		
 		if (image.getPdfWidth() < po.getMinPicSize() ) {
 			 image.setError(String.format("No need to change size (width = %d)",image.getPdfWidth()));
 			 image.setScaled(false);
+			 log.error(String.format("Image %s on page %d No need to change size (width = %d)",
+					 image.getName(),image.getPage(), image.getPdfWidth()));
 			 return;
 		}
 		
 		if (image.getPdfHeight() < po.getMinPicSize() ) {
 			 image.setError(String.format("No need to change size (width = %d)",image.getPdfHeight()));
 			 image.setScaled(false);
+			 log.error(String.format("Image %s on page %d No need to change size (width = %d)",
+					 image.getName(),image.getPage(),image.getPdfHeight()));
 			 return;
 		}
 		
@@ -316,8 +383,10 @@ public class PDFPack {
 		
 		if (ratio >= 1) {
 			
-			 image.setError(String.format("No need to pack (ratio = %.2f)",ratio));
+			 image.setError(String.format("No need to pack (ratio = %.2f)", ratio));
 			 image.setScaled(false);
+			 log.error(String.format("Image %s on page %d No need to pack (ratio = %.2f)",
+					 image.getName(),image.getPage(),ratio));
 			 return;
 		}
 		
@@ -325,6 +394,8 @@ public class PDFPack {
 			
 			 image.setError(String.format("No need to change size (ratio = %.2f)",ratio));
 			 image.setScaled(false);
+			 log.error(String.format("Image %s on page %d No need to change size (ratio = %.2f)",
+					 image.getName(),image.getPage(),ratio));
 			 return;
 			 
 		}
@@ -335,8 +406,10 @@ public class PDFPack {
 		
 		if (f.length() < po.getMinFileSize()) {
 			
-			 image.setError(String.format("No need to change size (size = %d)",f.length()));
+			 image.setError(String.format("No need to change size (size = %d)",f.length()));			 
 			 image.setScaled(false);
+			 log.error(String.format("Image %s on page %d No need to change size (size = %d)",
+					 image.getName(),image.getPage(),f.length()));
 			 return;
 		}
 		
@@ -361,7 +434,8 @@ public class PDFPack {
 		
 		
 		 if (img == null) {			 
-			 image.setError("Unknow image format.");
+			 image.setError("Unknown image format.");
+			 log.info(String.format("Image %s on page %d Unknown image format.",image.getName(),image.getPage()));
 			 image.setScaled(false);
 			 return;
 		 }
@@ -453,11 +527,14 @@ public class PDFPack {
 		     				
 		     				img.setSaved(true);
 		     				
+		     				log.info(String.format("Image %s on page %d save to %s, size %s", img.getName(),img.getPage(),img.getId(),PDFPackImage.hrSize(imgFile.toFile().length())));
+		     				
 	     				
 						} catch (Exception e) {
 							
 							img.setSaved(false);
 							img.setError(e.getMessage());
+							log.error(String.format("Error saving %s on page %d SKIPPED", img.getName(),img.getPage(),e));
 							
 						}
 	     			
