@@ -1,19 +1,57 @@
 package com.rstyle.rsdoc.pdfpack;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.Marshaller;
+import javax.xml.bind.Unmarshaller;
+import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlRootElement;
+import javax.xml.bind.annotation.XmlTransient;
+
 import com.rstyle.rsdoc.document.process.ScaleAlgo;
 
+@XmlRootElement(namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 public class PackOptions {
 
+    private static final String CONFIG_FILE = "pdfpack.cfg";    
+
+    @XmlElement(name="ignore",nillable=true,required=false,defaultValue="10",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private int ignoreScale;
 	
+	@XmlElement(name="dpi",nillable=true,required=false,defaultValue="150",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private int scaleDPI;
 	
+	@XmlElement(name="algo",nillable=true,required=false,defaultValue="SMOOTH",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private ScaleAlgo scaleAlgo;
 	
+	@XmlElement(name="minfile",nillable=true,required=false,defaultValue="4096",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private int minFileSize;
 	
+	@XmlElement(name="minpic",nillable=true,required=false,defaultValue="14",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private int minPicSize;
 	
+	@XmlElement(name="tmp",nillable=false,required=true,defaultValue="./",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String tmpDir;
+	
+	@XmlElement(name="db",nillable=false,required=true,namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String DBURL;
+	
+	@XmlElement(name="user",nillable=false,required=true,namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String dbUser;
+	
+	@XmlElement(name="pass",nillable=false,required=true,namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String dbPass;
+	
+	@XmlElement(name="docfile",nillable=false,required=true,defaultValue="documents.txt",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String docFile;
+	
+	@XmlTransient()
 	public int getIgnoreScale() {
 		return ignoreScale;
 	}
@@ -21,7 +59,8 @@ public class PackOptions {
 	public void setIgnoreScale(int ignoreScale) {
 		this.ignoreScale = ignoreScale;
 	}
-
+	
+    @XmlTransient()
 	public int getScaleDPI() {
 		return scaleDPI;
 	}
@@ -30,6 +69,7 @@ public class PackOptions {
 		this.scaleDPI = scaleDPI;
 	}
 
+    @XmlTransient()
 	public ScaleAlgo getScaleAlgo() {
 		return scaleAlgo;
 	}
@@ -37,7 +77,8 @@ public class PackOptions {
 	public void setScaleAlgo(ScaleAlgo scaleAlgo) {
 		this.scaleAlgo = scaleAlgo;
 	}
-
+	
+    @XmlTransient()
 	public int getMinFileSize() {
 		return minFileSize;
 	}
@@ -46,6 +87,7 @@ public class PackOptions {
 		this.minFileSize = minFileSize;
 	}
 
+    @XmlTransient()
 	public int getMinPicSize() {
 		return minPicSize;
 	}
@@ -53,12 +95,107 @@ public class PackOptions {
 	public void setMinPicSize(int minPicSize) {
 		this.minPicSize = minPicSize;
 	}
+	
+	@XmlTransient()
+	public String getTmpDir() {
+		return tmpDir;
+	}
+
+	public void setTmpDir(String tmpDir) {
+		this.tmpDir = tmpDir;
+	}
+
+    @XmlTransient()
+	public String getDBURL() {
+		return DBURL;
+	}
+
+	public void setDBURL(String dBURL) {
+		DBURL = dBURL;
+	}
+
+    @XmlTransient()
+	public String getDbUser() {
+		return dbUser;
+	}
+
+	public void setDbUser(String dbUser) {
+		this.dbUser = dbUser;
+	}
+
+    @XmlTransient()
+	public String getDbPass() {
+		return dbPass;
+	}
+
+	public void setDbPass(String dbPass) {
+		this.dbPass = dbPass;
+	}
+
+    @XmlTransient()
+	public String getDocFile() {
+		return docFile;
+	}
+
+	public void setDocFile(String docFile) {
+		this.docFile = docFile;
+	}
 
 	@Override
 	public String toString() {
 		return "PackOptions [\n ignoreScale=" + ignoreScale + "\n scaleDPI=" + scaleDPI + "\n scaleAlgo=" + scaleAlgo
-				+ "\n minFileSize=" + minFileSize + "\n minPicSize=" + minPicSize + "\n]";
+				+ "\n minFileSize=" + minFileSize + "\n minPicSize=" + minPicSize + "\n tmp=" + tmpDir  
+				+  "\n DB=" + DBURL +  "\n user=" + dbUser +  "\n docFile=" + docFile +	"\n]";
 	}
 
+	public static void save(){
+		
+	 try {
+		    PackOptions po = new PackOptions();		
+		    po.setIgnoreScale(10);		
+		    po.setScaleDPI(150);		
+		    po.setScaleAlgo(ScaleAlgo.SMOOTH);
+		    po.setMinFileSize(4096);		
+		    po.setMinPicSize(14);
+		    po.setTmpDir("./data/imgs/");
+		    po.setDBURL("DB");
+		    po.setDbUser("user");
+		    po.setDbPass("pass");
+		    po.setDocFile("documents.txt");
+			File file = new File(CONFIG_FILE+".template");
+			JAXBContext jaxbContext = JAXBContext.newInstance(po.getClass());
+			Marshaller jaxbMarshaller = jaxbContext.createMarshaller(); 
+			jaxbMarshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+			jaxbMarshaller.marshal(po, file);			
+		} catch (Exception e) {
+			System.out.println("Error creating config template - "+e.getMessage());
+			e.printStackTrace();
+		}
+		
+	}
 	
+	public static PackOptions load() throws JAXBException {
+		
+		File file = new File(CONFIG_FILE);
+		JAXBContext jaxbContext = JAXBContext.newInstance(PackOptions.class);
+		Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
+		return (PackOptions) jaxbUnmarshaller.unmarshal(file);
+		
+	}
+	
+	public List<String> docs() throws FileNotFoundException{
+		
+		List<String> res = new ArrayList<String>();
+		
+		Scanner s = new Scanner(new File(docFile));
+		
+		while (s.hasNext()){
+		    res.add(s.next());
+		}
+		
+		s.close();
+				
+		return res;
+				
+	}
 }

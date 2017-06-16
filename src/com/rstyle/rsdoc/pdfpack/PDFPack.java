@@ -12,12 +12,20 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Blob;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +34,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import javax.xml.bind.JAXBException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -43,7 +52,6 @@ import org.apache.pdfbox.pdmodel.graphics.xobject.PDXObjectImage;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
-import com.rstyle.rsdoc.document.process.ScaleAlgo;
 import com.rstyle.rsdoc.pdfpack.ImageLocator.ImageLocation;
 
 public class PDFPack {
@@ -60,41 +68,134 @@ public class PDFPack {
 	
 	private static final Logger log = Logger.getLogger("pdfpack");
 	
-	private static PackOptions getDefaultPackOptions(){
+	public static File retriveFile(long id,PackOptions po) throws SQLException, IOException {
 		
-		PackOptions po = new PackOptions();
+		  log.info("Connecting to database...");
 		
-		po.setIgnoreScale(10);
-		
-		po.setScaleDPI(150);
-		
-		po.setScaleAlgo(ScaleAlgo.SMOOTH);
-		
-		po.setMinFileSize(4096);
-		
-		po.setMinPicSize(14);
-		
-		return po;
+		  Connection conn = null;
+		  
+		  try {
+			  Properties connectionProps = new Properties();
+			  connectionProps.put("user", po.getDbUser());
+			  connectionProps.put("password", po.getDbPass());
+			  
+			  conn = DriverManager.getConnection(po.getDBURL(),connectionProps);
+			  
+			  log.info("Connected.");
+			  
+			  log.info(String.format("Retriving document %d",id));
+			  
+			  PreparedStatement pstmt = conn.prepareStatement("select file_data from r2_files where id = ?");
+		      pstmt.setLong(1, id);
+		      ResultSet rs = pstmt.executeQuery();
+		      
+		      log.info(String.format("Saving document %d",id));
+		      
+		      if (rs.next()) {
+		    	  
+		    	  Blob blob = rs.getBlob(1);
+		    	  InputStream in = blob.getBinaryStream();
+		    	  File outFile = Paths.get(po.getTmpDir(), UUID.randomUUID().toString()).toFile();
+		    	  OutputStream out = new FileOutputStream(outFile);
+		    	  byte[] buff = new byte[160000];  
+		    	  int len = 0;
+                  long fLen = 0; 
+		    	  
+		    	  
+		    	  while ((len = in.read(buff)) != -1) {
+		    		  fLen += len; 
+		    	      out.write(buff, 0, len);
+		    	  }
+		    	  
+		    	  out.flush();
+		    	  out.close();
+		    	  
+		    	  log.info(String.format("Document %d saved at %s, size - %s",id,outFile.getName(),PDFPackImage.hrSize(fLen)));
+		    	  
+		    	  return fLen == 0 ? null : outFile;
+		    	  
+		      } else {
+		    	  log.info(String.format("Document %d not found",id));
+		    	  return null;
+		      }
+			
+			  
+			
+			} finally {
+				try {
+					if (conn != null)
+					   conn.close();	
+				} catch (Exception e) {
+					log.error(e.getMessage());
+				}
+				
+			}
+
 	}
 	
-	public static void main(String[] args) throws FileNotFoundException, IOException, InterruptedException, COSVisitorException, ParserConfigurationException, SAXException, TransformerException {
+	
+	public static void main(String[] args) throws JAXBException, FileNotFoundException {
 		
-		log.info("PDF pack Started.");
+		 log.info("PDF pack Started.");
 		
-		final Path tmp = Paths.get("./data/","/imgs/");
+		 PackOptions po = PackOptions.load();
+		 
+		 List<String> docs = po.docs();
+		 
+		 if (docs.size() == 0) {
+			 log.info("FIle list is empty.");
+			 return;
+		 }
 		
-		 PackOptions po = getDefaultPackOptions();
+		 final Path tmp = Paths.get(po.getTmpDir());
 		 
 		 log.info(po.toString());
 		 
-		 log.info("Temp path " + tmp.toString());
-		
-		 boolean packResult = pack(new FileInputStream("./data/test.pdf"),new FileOutputStream("./data/test_scaled1.pdf"),tmp,po);
+		 log.info(String.format("Proceeding %d lines.", docs.size()));
 		 
-		 if (!packResult) {
-			 log.info("SKIPPED");
+		 //boolean packResult = pack(new FileInputStream("./data/test.pdf"),new FileOutputStream("./data/test_scaled1.pdf"),tmp,po);
+		 
+		 for(String fileId : docs) {
+			 
+			 
+			 try {
+				 
+				 if (fileId.startsWith("#")) continue;
+
+				 log.info(String.format("Proceeding document %s", fileId));
+				 
+				 File f = retriveFile(Long.valueOf(fileId), po);
+				 
+				 File outFile = Paths.get(f.getAbsolutePath()+SCALED_POSTFIX).toFile();
+				 
+				 boolean packResult = pack(new FileInputStream(f),new FileOutputStream(outFile),tmp,po);
+				 
+				 if (!packResult) {
+					 log.info("SKIPPED");
+					 f.delete();
+					 continue;
+				 }
+				 
+				 long srcLen = f.length();
+				 
+				 long dstLen = outFile.length();
+				 
+				 if (dstLen >= srcLen) {
+					 log.info(String.format("Packed file is larger than the original file, packed size - %s original - %s SKIPPED",PDFPackImage.hrSize(dstLen),PDFPackImage.hrSize(srcLen)));
+					 f.delete();
+					 outFile.delete();
+					 continue;
+					 
+				 }
+				 
+				 log.info(String.format("Finished document %s (%s)", fileId, outFile.getAbsolutePath()));
+				
+			} catch (Exception e) {
+				log.error(String.format("Error processing file %s", fileId),e);
+			}
+
 		 }
-		
+		 
 		 log.info("PDF pack Finished.");
 	}
 
@@ -204,7 +305,7 @@ public class PDFPack {
           }
           
           log.info("Removing temporary file(s).");
-          clearTemp(tmpPath, imgs);
+          //clearTemp(tmpPath, imgs); FIXME
           
           return scaledImages > 0;
 	}
@@ -458,6 +559,7 @@ public class PDFPack {
 		File outFile = Paths.get(tmp.toString(), image.getId() + SCALED_POSTFIX).toFile();
 		
 		ImageIO.write(bimage, "jpeg", outFile);
+		//ImageIO.write(bimage, "png", outFile);
 		
 		image.setNewSize(outFile.length());
 		
