@@ -176,7 +176,7 @@ public class PDFPack {
 	}
 	
 	
-	public static void main(String[] args) throws JAXBException, FileNotFoundException {
+	public static void main(String[] args) throws JAXBException, IOException {
 		
 		 log.info("PDF pack Started.");
 		
@@ -191,6 +191,8 @@ public class PDFPack {
 		
 		 final Path tmp = Paths.get(po.getTmpDir());
 		 
+         Files.createDirectories(tmp);
+         
 		 log.info(po.toString());
 		 
 		 log.info(String.format("Proceeding %d lines.", docs.size()));
@@ -269,8 +271,6 @@ public class PDFPack {
 		
 		  long startTime = System.nanoTime();
 		  
-          Files.createDirectories(tmpPath);
-          
           PDDocument document = PDDocument.load(inPDF);
           
           int scaledImages = 0;
