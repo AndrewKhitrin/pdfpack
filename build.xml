@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<project name="NSI Fix" default="make" basedir=".">
+<project name="PDFPack" default="make" basedir=".">
   <property name="src.dir" location="src" />
   <property name="build.dir" location="binary" />
   <property name="dist.dir" location="c:\pdfpack" />

@@ -1,4 +1,4 @@
-select r2_files.id as id,r2_files.file_data 
+select r2_files.id as id
   from r2_files
  where id not in
        (
