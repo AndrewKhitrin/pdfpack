@@ -20,6 +20,8 @@ import com.rstyle.rsdoc.document.process.ScaleAlgo;
 public class PackOptions {
 
     private static final String CONFIG_FILE = "pdfpack.cfg";    
+    
+    private static final String QUERY_FILE = "files.sql";
 
     @XmlElement(name="ignore",nillable=true,required=false,defaultValue="10",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private int ignoreScale;
@@ -50,7 +52,10 @@ public class PackOptions {
 	
 	@XmlElement(name="docfile",nillable=false,required=true,defaultValue="documents.txt",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private String docFile;
-	
+
+	@XmlElement(name="docsrc",nillable=false,required=true,defaultValue="db",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String docSrc;
+
 	@XmlTransient()
 	public int getIgnoreScale() {
 		return ignoreScale;
@@ -132,7 +137,7 @@ public class PackOptions {
 		this.dbPass = dbPass;
 	}
 
-    @XmlTransient()
+	@XmlTransient()
 	public String getDocFile() {
 		return docFile;
 	}
@@ -140,12 +145,21 @@ public class PackOptions {
 	public void setDocFile(String docFile) {
 		this.docFile = docFile;
 	}
+	
+	@XmlTransient()
+	public String getDocSrc() {
+		return docSrc;
+	}
+
+	public void setDocSrc(String docSrc) {
+		this.docSrc = docSrc;
+	}
 
 	@Override
 	public String toString() {
 		return "PackOptions [\n ignoreScale=" + ignoreScale + "\n scaleDPI=" + scaleDPI + "\n scaleAlgo=" + scaleAlgo
 				+ "\n minFileSize=" + minFileSize + "\n minPicSize=" + minPicSize + "\n tmp=" + tmpDir  
-				+  "\n DB=" + DBURL +  "\n user=" + dbUser +  "\n docFile=" + docFile +	"\n]";
+				+  "\n DB=" + DBURL +  "\n user=" + dbUser +  "\n docFile=" + docFile +	"\n docSrc= "+docSrc+"\n]";
 	}
 
 	public static void save(){
@@ -162,6 +176,7 @@ public class PackOptions {
 		    po.setDbUser("user");
 		    po.setDbPass("pass");
 		    po.setDocFile("documents.txt");
+		    po.setDocSrc("db");
 			File file = new File(CONFIG_FILE+".template");
 			JAXBContext jaxbContext = JAXBContext.newInstance(po.getClass());
 			Marshaller jaxbMarshaller = jaxbContext.createMarshaller(); 
@@ -187,15 +202,42 @@ public class PackOptions {
 		
 		List<String> res = new ArrayList<String>();
 		
-		Scanner s = new Scanner(new File(docFile));
+		Scanner s = null;
 		
-		while (s.hasNext()){
-		    res.add(s.next());
+		try {
+
+			s = new Scanner(new File(docFile));
+			
+			while (s.hasNext()){
+			    res.add(s.next());
+			}
+			
+		} finally {
+			
+			if (s != null) s.close();
+			
 		}
-		
-		s.close();
 				
 		return res;
+		
+
+	}
+	
+	public String query() throws FileNotFoundException{
+		
+		Scanner s = null;
+		
+		try {
+
+			s = new Scanner(new File(QUERY_FILE));
+			
+			return s.useDelimiter("\\A").next();
+			
+		} finally {
+			
+			if (s != null) s.close();
+			
+		}
 				
 	}
 }

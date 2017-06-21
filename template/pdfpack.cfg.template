@@ -10,4 +10,5 @@
     <user>user</user>
     <pass>pass</pass>
     <docfile>documents.txt</docfile>
+	<docsrc>db</docsrc>
 </packOptions>

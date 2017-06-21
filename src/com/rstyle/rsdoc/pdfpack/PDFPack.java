@@ -19,6 +19,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -65,9 +66,14 @@ public class PDFPack {
 	
 	private static final String SCALED_POSTFIX = "_scaled";
 	
+	private static final String SRC_DB = "db";
+	
+	private static final String SRC_FILE = "file";
+	
 	private static final int VERSION = 1;
 	
 	private static final Logger log = Logger.getLogger("pdfpack");
+	
 	
 	public static void replaceFile(long id,PackOptions po,File newDoc) throws SQLException, IOException {
 		
@@ -182,13 +188,76 @@ public class PDFPack {
 		
 		 PackOptions po = PackOptions.load();
 		 
-		 List<String> docs = po.docs();
+		 List<String> docs = new ArrayList<String>(1000);
 		 
-		 if (docs.size() == 0) {
-			 log.info("FIle list is empty.");
+		 if (po.getDocSrc().equalsIgnoreCase(SRC_DB)) {
+			 
+			 String sql = po.query();
+			 
+			 log.info("Connecting to database...");
+			 
+			  Connection conn = null;
+
+			  long docCount = 0;
+		      
+			  try {
+			  
+				  Properties connectionProps = new Properties();
+				  connectionProps.put("user", po.getDbUser());
+				  connectionProps.put("password", po.getDbPass());
+				  
+				  conn = DriverManager.getConnection(po.getDBURL(),connectionProps);
+				  
+				  log.info("Connected.");
+				 
+				  PreparedStatement pstmt = conn.prepareStatement(sql);
+			      ResultSet rs = pstmt.executeQuery();
+			      
+			      log.info("Loading document ids....");
+			      
+			      while(rs.next()) {
+			    	  
+			    	  docs.add(rs.getString(1));
+			    	  
+			    	  docCount++;
+			      }
+		      
+			  } catch (SQLException e) {
+                    log.info("Unable to load document ids");
+  			    	e.printStackTrace();
+  			    	return;
+  			    	
+	         } finally {
+					if (conn != null)
+						try {
+							conn.close();
+						} catch (SQLException e) {
+							e.printStackTrace();
+						} 
+			 }
+
+      
+		      log.info(String.format("Loaded %d documents",docCount));
+		      
+
+			 
+		 } else if (po.getDocSrc().equalsIgnoreCase(SRC_FILE)) {
+
+			 docs = po.docs();
+			 
+			 if (docs.size() == 0) {
+				 log.info("FIle list is empty.");
+				 return;
+			 }
+			
+			 
+		 } else {
+			 
+			 log.info(String.format("Unknown document source %s", po.getDocSrc()));
 			 return;
+			 
 		 }
-		
+		 
 		 final Path tmp = Paths.get(po.getTmpDir());
 		 
          Files.createDirectories(tmp);
@@ -291,7 +360,7 @@ public class PDFPack {
 	              }        	  
 	          }
 	          
-	          log.info("Extractiong images");
+	          log.info("Extracting images");
 			
 	          Map<Integer,Map<String,PDFPackImage>> imgs =  extractImg(document,tmpPath);
 	          
