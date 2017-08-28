@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <packOptions xmlns="http://www.redsys.ru/rsdoc/pdf/config/1.0/">
     <ignore>10</ignore>
+	<stoponerror>true</stoponerror>
+	<changedb>false</changedb>
     <dpi>150</dpi>
     <algo>SMOOTH</algo>
     <minfile>4096</minfile>
     <minpic>14</minpic>
     <tmp>./data/imgs/</tmp>
+    <backup>./data/backup/</backup>	
     <db>DB</db>
     <user>user</user>
     <pass>pass</pass>

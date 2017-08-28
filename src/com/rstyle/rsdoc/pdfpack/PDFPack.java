@@ -5,7 +5,6 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -143,7 +142,7 @@ public class PDFPack {
 		    	  
 		    	  Blob blob = rs.getBlob(1);
 		    	  InputStream in = blob.getBinaryStream();
-		    	  File outFile = Paths.get(po.getTmpDir(), UUID.randomUUID().toString()).toFile();
+		    	  File outFile = Paths.get(po.getBackupDir(), String.valueOf(id)).toFile();
 		    	  OutputStream out = new FileOutputStream(outFile);
 		    	  byte[] buff = new byte[160000];  
 		    	  int len = 0;
@@ -262,7 +261,28 @@ public class PDFPack {
 		 
          Files.createDirectories(tmp);
          
-		 log.info(po.toString());
+         final Path backup = Paths.get(po.getBackupDir());
+         
+         Files.createDirectories(backup);
+         
+         log.info(po.toString());
+		 
+		 log.info(String.format("Check backup directory %s.", po.getBackupDir()));
+		 
+		 for(String fileId : docs) {
+			 
+			 Path p = Paths.get(po.getBackupDir(), fileId); 
+			 
+			 if (Files.exists(p)) {
+				 
+				 System.out.println(String.format("Found backup item '%s' for file %s ", p.toString(),fileId));
+				 
+				 System.out.println("UNABLE TO BACKUP. EXECUTION STOPPED.");
+				 
+				 if (po.getStopOnError()) return;
+				 
+			 }
+		 }
 		 
 		 log.info(String.format("Proceeding %d lines.", docs.size()));
 		 
@@ -276,14 +296,15 @@ public class PDFPack {
 				 
 				 File f = retriveFile(Long.valueOf(fileId), po);
 				 
-				 File outFile = Paths.get(f.getAbsolutePath()+SCALED_POSTFIX).toFile();
+				 File outFile = Paths.get(backup.toString(), fileId+SCALED_POSTFIX).toFile();
 				 
 				 boolean packResult = pack(new FileInputStream(f),new FileOutputStream(outFile),tmp,po);
 				 
 				 if (!packResult) {
-					 log.info("SKIPPED");
-					 f.delete();
-					 continue;
+					   log.info(String.format("SKIPPED (not packed) %s",fileId));
+					   //f.delete();
+					   outFile.delete();
+					   continue;
 				 }
 				 
 				 long srcLen = f.length();
@@ -292,24 +313,35 @@ public class PDFPack {
 				 
 				 if (dstLen >= srcLen) {
 					 log.info(String.format("Packed file is larger than the original file, packed size - %s original - %s SKIPPED",PDFPackImage.hrSize(dstLen),PDFPackImage.hrSize(srcLen)));
-					 f.delete();
+					 //f.delete();
 					 outFile.delete();
 					 continue;
 					 
 				 }
 				 
-				 log.info(String.format("Saving new document %s ", fileId));
+				 if (po.getChangeDB()) {
+					 log.info(String.format("Saving new document %s ", fileId));
+					 
+					 replaceFile(Long.valueOf(fileId), po, outFile);
+					 
+				 } else {
+					 
+					 log.info(String.format("SKIPPING SAVE new document %s (OPTION changedb set to 'true')", fileId));
+					 
+				 }
 				 
-				 replaceFile(Long.valueOf(fileId), po, outFile);
 				 
 				 log.info(String.format("Finished document %s (%s)", fileId, outFile.getAbsolutePath()));
 				 
-				 f.delete();
 				 outFile.delete();
 				 
 				
 			} catch (Exception e) {
 				log.error(String.format("Error processing file %s", fileId),e);
+				if (po.getStopOnError()) {
+					System.out.println("EXECUTION STOPPED.");
+					return;
+				}
 			}
 
 		 }
@@ -356,6 +388,8 @@ public class PDFPack {
 	            			  (float) meta.getOldSize() / (float) meta.getNewSize(),
 	            			  meta.getStreams().size()
 	            			  ));
+	            	  outPDF.close();	    	          
+	    	          outPDF = null;
 	            	  return false;
 	              }        	  
 	          }
@@ -381,7 +415,7 @@ public class PDFPack {
 	        	  }
 	         }
 	          
-	         log.info(String.format("%d pages proceed %d images found", pCount,iCount));
+	         log.info(String.format("%d pages proceed %d images found (size = %d)", pCount,iCount,imageSize));
 	          
 	          ExecutorService taskExecutor = Executors.newFixedThreadPool(MAX_THREADS);
 	          
@@ -423,6 +457,10 @@ public class PDFPack {
 	           document.save(outPDF);
 	           outPDF.flush();
 	          }
+	          
+	          outPDF.close();
+	          
+	          outPDF = null;
 	          
 	          log.info("Removing temporary file(s).");
 	          System.gc();
@@ -671,8 +709,8 @@ public class PDFPack {
 		int scaleX = (int) (img.getWidth() * ratio);
 		int scaleY = (int) (img.getHeight() * ratio);
 		
-		image.setNewHeight(scaleX);
-		image.setNewWidth(scaleY);
+		image.setNewHeight(scaleY);
+		image.setNewWidth(scaleX);
 		
 		java.awt.Image newImg = img.getScaledInstance(scaleX, scaleY, po.getScaleAlgo().getInt());
 		
@@ -685,14 +723,22 @@ public class PDFPack {
 		
 		File outFile = Paths.get(tmp.toString(), image.getId() + SCALED_POSTFIX).toFile();
 		
-		ImageIO.write(bimage, "jpeg", outFile);
-		//ImageIO.write(bimage, image.getFmt(), outFile);
+        FileOutputStream fos = new FileOutputStream(outFile);  
+		
+		//ImageIO.write(bimage, "jpeg", outFile);
+        
+        ImageIO.write(bimage, "jpeg", fos);
 		
 		bGr.dispose();
 		
 		image.setNewSize(outFile.length());
 		
 		image.setScaled(true);
+		
+        fos.flush();
+        
+        fos.close();
+
 		
 	}
 	
@@ -750,7 +796,9 @@ public class PDFPack {
 	     				
 		     				imgFile = Paths.get(tmpPath.toString(), img.getId());
 		     				
-		     				location.getImage().write2file(imgFile.toFile());
+		     				FileOutputStream fos = new FileOutputStream(imgFile.toFile());
+		     				
+		     				location.getImage().write2OutputStream(fos);
 		     				
 		     				img.setPdfHeight(location.getImage().getHeight());
 		     				
@@ -759,6 +807,12 @@ public class PDFPack {
 		     				img.setSaved(true);
 		     				
 		     				log.info(String.format("Image %s on page %d save to %s, size %s", img.getName(),img.getPage(),img.getId(),PDFPackImage.hrSize(imgFile.toFile().length())));
+		     				
+		     				fos.flush();
+		     				
+		     				fos.close();
+		     				
+		     				fos = null;
 		     				
 	     				
 						} catch (Exception e) {

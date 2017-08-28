@@ -56,6 +56,16 @@ public class PackOptions {
 	@XmlElement(name="docsrc",nillable=false,required=true,defaultValue="db",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
 	private String docSrc;
 
+	@XmlElement(name="backup",nillable=false,required=true,defaultValue="./backup",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String backupDir;
+
+	@XmlElement(name="stoponerror",nillable=false,required=true,defaultValue="true",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String stopOnError;
+
+	@XmlElement(name="changedb",nillable=false,required=true,defaultValue="false",namespace="http://www.redsys.ru/rsdoc/pdf/config/1.0/")
+	private String changeDB;
+
+
 	@XmlTransient()
 	public int getIgnoreScale() {
 		return ignoreScale;
@@ -154,12 +164,31 @@ public class PackOptions {
 	public void setDocSrc(String docSrc) {
 		this.docSrc = docSrc;
 	}
+	
+	
+	@XmlTransient()
+	public String getBackupDir() {
+		return backupDir;
+	}
+	
+	
+	@XmlTransient()
+	public boolean getStopOnError() {
+		return stopOnError == null ? false : stopOnError.trim().equalsIgnoreCase("true");
+	}
+
+	
+	@XmlTransient()
+	public boolean getChangeDB() {
+		return changeDB == null ? false : changeDB.trim().equalsIgnoreCase("true");
+	}
 
 	@Override
 	public String toString() {
 		return "PackOptions [\n ignoreScale=" + ignoreScale + "\n scaleDPI=" + scaleDPI + "\n scaleAlgo=" + scaleAlgo
 				+ "\n minFileSize=" + minFileSize + "\n minPicSize=" + minPicSize + "\n tmp=" + tmpDir  
-				+  "\n DB=" + DBURL +  "\n user=" + dbUser +  "\n docFile=" + docFile +	"\n docSrc= "+docSrc+"\n]";
+				+  "\n DB=" + DBURL +  "\n user=" + dbUser +  "\n docFile=" + docFile +	"\n docSrc= "+docSrc+"\n"
+				+ "\n stopOnError=" + stopOnError + "\n changeDB=" + changeDB + "\n backupDIR=" + backupDir + "]";
 	}
 
 	public static void save(){
