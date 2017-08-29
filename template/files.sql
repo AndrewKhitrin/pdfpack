@@ -2,14 +2,14 @@ select r2_files.id as id
   from r2_files
  where id not in
        (
-        --отберём все файлы, которые участвовали в подписании, а затем отберём всё, кроме таких файлов:
-        --0) Подписание собственно файла
+        --РѕС‚Р±РµСЂС‘Рј РІСЃРµ С„Р°Р№Р»С‹, РєРѕС‚РѕСЂС‹Рµ СѓС‡Р°СЃС‚РІРѕРІР°Р»Рё РІ РїРѕРґРїРёСЃР°РЅРёРё, Р° Р·Р°С‚РµРј РѕС‚Р±РµСЂС‘Рј РІСЃС‘, РєСЂРѕРјРµ С‚Р°РєРёС… С„Р°Р№Р»РѕРІ:
+        --0) РџРѕРґРїРёСЃР°РЅРёРµ СЃРѕР±СЃС‚РІРµРЅРЅРѕ С„Р°Р№Р»Р°
         select id
           from r2_files f
          where ((select id_class from sys_attributes where id = f.id_attr),
                 f.id_record) in (select id_class, id_object from esign)
         union all
-        --1) документ  - подписывается коммуникант. Дата последнего редактирования подписи - больше даты добавления файла
+        --1) РґРѕРєСѓРјРµРЅС‚  - РїРѕРґРїРёСЃС‹РІР°РµС‚СЃСЏ РєРѕРјРјСѓРЅРёРєР°РЅС‚. Р”Р°С‚Р° РїРѕСЃР»РµРґРЅРµРіРѕ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ РїРѕРґРїРёСЃРё - Р±РѕР»СЊС€Рµ РґР°С‚С‹ РґРѕР±Р°РІР»РµРЅРёСЏ С„Р°Р№Р»Р°
         select id
           from r2_files f
          where f.id_attr = 645
@@ -20,7 +20,7 @@ select r2_files.id as id
                    and esign.id_class = 51
                    and esign.dt_edit > f.dt_create)
         union all
-        --2) Операция над документом 
+        --2) РћРїРµСЂР°С†РёСЏ РЅР°Рґ РґРѕРєСѓРјРµРЅС‚РѕРј 
         select id
           from r2_files f
          where id_attr = 10558
@@ -30,7 +30,7 @@ select r2_files.id as id
                    and esign.id_class = 16
                    and esign.dt_edit > f.dt_create)
         union all
-        --3) Резолюция   --файл приложен к документу
+        --3) Р РµР·РѕР»СЋС†РёСЏ   --С„Р°Р№Р» РїСЂРёР»РѕР¶РµРЅ Рє РґРѕРєСѓРјРµРЅС‚Сѓ
         select id
           from r2_files f
          where id_attr = 645
@@ -42,7 +42,7 @@ select r2_files.id as id
                    and esign.dt_edit > f.dt_create)
         
         union all
-        --4) Приложение при подписании операции  
+        --4) РџСЂРёР»РѕР¶РµРЅРёРµ РїСЂРё РїРѕРґРїРёСЃР°РЅРёРё РѕРїРµСЂР°С†РёРё  
         select id
           from r2_files f
          where id_attr = 653
@@ -55,7 +55,7 @@ select r2_files.id as id
                    and esign.id_class = 16
                    and esign.dt_edit > f.dt_create)
         union all
-        --5) Приложение при подписании документа
+        --5) РџСЂРёР»РѕР¶РµРЅРёРµ РїСЂРё РїРѕРґРїРёСЃР°РЅРёРё РґРѕРєСѓРјРµРЅС‚Р°
         select id
           from r2_files f
          where id_attr = 653
